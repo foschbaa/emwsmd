@@ -68,7 +68,7 @@ jobs:
 
       - name: macOS Launcher erstellen
         run: |
-          mv dist/emwsmd dist/emwsmd-macos
+          mv dist/emwsmd dist/emwsmd
           echo '#!/bin/bash' > dist/run-emwsmd.command
           echo 'cd "$(dirname "$0")"' >> dist/run-emwsmd.command
           echo './emwsmd' >> dist/run-emwsmd.command
