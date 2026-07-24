@@ -1,0 +1,86 @@
+name: Build Releases
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+
+  build-windows:
+    name: Build Windows EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Python installieren
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: EXE bauen
+        run: |
+          pyinstaller --onefile --name emwsmd --clean --exclude-module tkinter --exclude-module unittest --exclude-module test emwsmd.py
+
+      - name: Windows Paket zippen
+        run: |
+          copy README.md dist\README.txt
+          cd dist
+          powershell Compress-Archive -Path emwsmd.exe,README.txt -DestinationPath emwsmd_windows.zip
+
+      - name: Windows Release Asset hochladen
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/emwsmd_windows.zip
+
+  build-macos:
+    name: Build macOS Console App
+    runs-on: macos-latest
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Python installieren
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: macOS Binary bauen
+        run: |
+          pyinstaller --onefile --name emwsmd --clean --exclude-module tkinter --exclude-module unittest --exclude-module test emwsmd.py
+
+      - name: macOS Launcher erstellen
+        run: |
+          mv dist/emwsmd dist/emwsmd-macos
+          echo '#!/bin/bash' > dist/run-emwsmd.command
+          echo 'cd "$(dirname "$0")"' >> dist/run-emwsmd.command
+          echo './emwsmd' >> dist/run-emwsmd.command
+          chmod +x dist/run-emwsmd.command
+
+      - name: macOS Paket zippen
+        run: |
+          cp README.md dist/README.txt
+          cd dist
+          zip -r emwsmd_macos.zip emwsmd run-emwsmd.command README.txt
+
+      - name: macOS Release Asset hochladen
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/emwsmd_macos.zip
