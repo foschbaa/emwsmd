@@ -1,6 +1,6 @@
 """
 emwsmd - Ey Mann, wo sind meine Drohnen!
-Version 3.1.8
+Version 3.1.9
 
 Neue PKCE-basierte Desktop-Version:
 - feste Client ID im Programm
@@ -30,7 +30,7 @@ import requests
 
 APP_NAME = "emwsmd"
 APP_TAGLINE = "Ey Mann, wo sind meine Drohnen!"
-VERSION = "3.1.8"
+VERSION = "3.1.9"
 REPORT_TITLE = f"{APP_TAGLINE}"
 REPORT_FILENAME_DEFAULT = f"{APP_NAME}_Bericht.html"
 

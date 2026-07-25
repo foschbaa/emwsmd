@@ -1,18 +1,18 @@
 """
-emwsmd_GUI.0.1.5.py
+emwsmd_GUI.3.1.9.py
 Ey Mann, wo sind meine Drohnen! - GUI-Version (auf Basis von emwsmd.py v3.1.8)
 
 Eigenstaendige, komplette Anwendung: Auth, ESI-Abfrage, Datenaufbereitung UND GUI
 liegen in dieser einen Datei. Die Konsolen-Version wird nicht mehr separat benoetigt.
 
 Versionsschema fuer diese GUI-Reihe: emwsmd_GUI.<major>.<minor>.<patch>.py
-Diese Datei: emwsmd_GUI.0.1.5.py
+Diese Datei: emwsmd_GUI.3.1.9.py
 
 Installation (im aktivierten venv):
     pip install "flet[all]" requests
 
 Start:
-    python "emwsmd_GUI.0.1.5.py"
+    python "emwsmd_GUI.3.1.9.py"
 """
 
 import base64
@@ -38,7 +38,7 @@ import flet as ft
 
 APP_NAME = "emwsmd_gui"
 APP_TAGLINE = "Ey Mann, wo sind meine Drohnen!"
-GUI_VERSION = "0.1.5"
+GUI_VERSION = "3.1.9"
 
 REPORT_TITLE = f"{APP_TAGLINE}"
 REPORT_FILENAME_DEFAULT = f"{APP_NAME}_Bericht.html"
@@ -552,10 +552,32 @@ th {{ background:#2b2b2b; color:#eaeaea; }}
 # GUI (Flet)
 # ---------------------------------------------------------------------------
 
+def _set_window_size(page):
+    if hasattr(page, "window"):
+        try:
+            page.window.width = 980
+            page.window.height = 720
+        except Exception:
+            pass
+    if hasattr(page, "window_width"):
+        page.window_width = 980
+    if hasattr(page, "window_height"):
+        page.window_height = 720
+
+
+def _launch_flet_app(target):
+    if hasattr(ft, "run"):
+        ft.run(target)
+        return
+    if hasattr(ft, "app"):
+        ft.app(target=target)
+        return
+    raise RuntimeError("Keine unterstuetzte Flet-Startmethode gefunden.")
+
+
 def main(page: ft.Page):
     page.title = f"{APP_TAGLINE} (GUI v{GUI_VERSION})"
-    page.window_width = 980
-    page.window_height = 720
+    _set_window_size(page)
     page.theme_mode = ft.ThemeMode.DARK
     page.padding = 20
 
@@ -610,29 +632,20 @@ def main(page: ft.Page):
         rows=[],
     )
 
-    tabs = ft.Tabs(
-        length=2,
-        selected_index=0,
-        expand=True,
-        content=ft.Column(
-            expand=True,
-            controls=[
-                ft.TabBar(
-                    tabs=[
-                        ft.Tab(label="Nach Drohnenname"),
-                        ft.Tab(label="Nach Station"),
-                    ],
-                ),
-                ft.TabBarView(
-                    expand=True,
-                    controls=[
-                        ft.Container(ft.Column([name_table], scroll=ft.ScrollMode.AUTO), padding=10),
-                        ft.Container(ft.Column([station_table], scroll=ft.ScrollMode.AUTO), padding=10),
-                    ],
-                ),
-            ],
-        ),
-    )
+    name_view = ft.Container(ft.Column([name_table], scroll=ft.ScrollMode.AUTO), padding=10, expand=True)
+    station_view = ft.Container(ft.Column([station_table], scroll=ft.ScrollMode.AUTO), padding=10, expand=True)
+    results_panel = ft.Container(content=name_view, expand=True, padding=10)
+
+    def show_name_view(e=None):
+        results_panel.content = name_view
+        page.update()
+
+    def show_station_view(e=None):
+        results_panel.content = station_view
+        page.update()
+
+    view_name_btn = ft.Button("Nach Drohnenname", on_click=show_name_view)
+    view_station_btn = ft.Button("Nach Station", on_click=show_station_view)
 
     def apply_progress():
         phase = progress_state["phase"]
@@ -1073,9 +1086,10 @@ def main(page: ft.Page):
         ft.Column([ft.Row([status_text], alignment=ft.MainAxisAlignment.START), progress_column]),
         ft.Divider(),
         total_text,
-        ft.SafeArea(expand=True, content=ft.Container(content=tabs, expand=True)),
+        ft.Row([view_name_btn, view_station_btn], wrap=True),
+        ft.SafeArea(expand=True, content=results_panel),
     )
 
 
 if __name__ == "__main__":
-    ft.run(main)
+    _launch_flet_app(main)

@@ -109,13 +109,13 @@ jobs:
 
       - name: GUI EXE bauen
         run: |
-          pyinstaller --onefile --windowed --name %APP_NAME% --clean --exclude-module tkinter --exclude-module unittest --exclude-module test %ENTRY_FILE%
+          pyinstaller --onefile --windowed --name emwsmd-gui --clean --exclude-module tkinter --exclude-module unittest --exclude-module test emwsmd_gui.py
 
       - name: Windows GUI Paket zippen
         run: |
           if exist README-GUI.md copy README-GUI.md dist\README-GUI.txt
           cd dist
-          powershell Compress-Archive -Path emwsmd-gui.exe,README-GUI.txt -DestinationPath emwsmd-gui_%SYSTEM%.zip
+          powershell Compress-Archive -Path emwsmd-gui.exe,README-GUI.txt -DestinationPath emwsmd-gui_windows.zip
 
       - name: Windows GUI Release Asset hochladen
         uses: softprops/action-gh-release@v2
@@ -143,15 +143,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install "flet[all]" requests
-          pip install pyinstaller
+          pip install "pyinstaller==6.10.0"
 
       - name: macOS GUI Binary bauen
         run: |
-          pyinstaller --onefile --windowed --name "$APP_NAME" --clean --exclude-module tkinter --exclude-module unittest --exclude-module test "$ENTRY_FILE"
+          pyinstaller --onefile --windowed --name emwsmd-gui --clean --exclude-module tkinter --exclude-module unittest --exclude-module test --codesign-identity "" emwsmd_gui.py
 
       - name: macOS GUI Launcher erstellen
         run: |
-          mv "dist/$APP_NAME" "dist/$APP_NAME"
+          mv "dist/emwsmd-gui" "dist/emwsmd-gui"
           echo '#!/bin/bash' > dist/run-emwsmd-gui.command
           echo 'cd "$(dirname "$0")"' >> dist/run-emwsmd-gui.command
           echo './emwsmd-gui' >> dist/run-emwsmd-gui.command
@@ -159,9 +159,9 @@ jobs:
 
       - name: macOS GUI Paket zippen
         run: |
-          cp README-GUI.md dist/README-GUI.txt
+          if [ -f README-GUI.md ]; then cp README-GUI.md dist/README-GUI.txt; else cp README.md dist/README-GUI.txt; fi
           cd dist
-          zip -r emwsmd-gui_${SYSTEM}.zip "$APP_NAME" run-emwsmd-gui.command README-GUI.txt
+          zip -r emwsmd-gui_macos.zip "$APP_NAME" run-emwsmd-gui.command README-GUI.txt
 
       - name: macOS GUI Release Asset hochladen
         uses: softprops/action-gh-release@v2
