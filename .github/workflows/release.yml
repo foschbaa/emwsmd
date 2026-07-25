@@ -8,9 +8,8 @@ permissions:
   contents: write
 
 jobs:
-
-  build-windows:
-    name: Build Windows EXE
+  build-windows-console:
+    name: Build Windows Console EXE
     runs-on: windows-latest
 
     steps:
@@ -43,7 +42,7 @@ jobs:
         with:
           files: dist/emwsmd_windows.zip
 
-  build-macos:
+  build-macos-console:
     name: Build macOS Console App
     runs-on: macos-latest
 
@@ -84,3 +83,87 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/emwsmd_macos.zip
+
+  build-windows-gui:
+    name: Build Windows GUI EXE
+    runs-on: windows-latest
+    env:
+      APP_NAME: emwsmd-gui
+      SYSTEM: windows
+      ENTRY_FILE: emwsmd_gui.py
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Python installieren
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install "flet[all]" requests
+          pip install pyinstaller
+
+      - name: GUI EXE bauen
+        run: |
+          pyinstaller --onefile --windowed --name %APP_NAME% --clean --exclude-module tkinter --exclude-module unittest --exclude-module test %ENTRY_FILE%
+
+      - name: Windows GUI Paket zippen
+        run: |
+          if exist README-GUI.md copy README-GUI.md dist\README-GUI.txt
+          cd dist
+          powershell Compress-Archive -Path emwsmd-gui.exe,README-GUI.txt -DestinationPath emwsmd-gui_%SYSTEM%.zip
+
+      - name: Windows GUI Release Asset hochladen
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/emwsmd-gui_windows.zip
+
+  build-macos-gui:
+    name: Build macOS GUI App
+    runs-on: macos-latest
+    env:
+      APP_NAME: emwsmd-gui
+      SYSTEM: macos
+      ENTRY_FILE: emwsmd_gui.py
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Python installieren
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install "flet[all]" requests
+          pip install pyinstaller
+
+      - name: macOS GUI Binary bauen
+        run: |
+          pyinstaller --onefile --windowed --name "$APP_NAME" --clean --exclude-module tkinter --exclude-module unittest --exclude-module test "$ENTRY_FILE"
+
+      - name: macOS GUI Launcher erstellen
+        run: |
+          mv "dist/$APP_NAME" "dist/$APP_NAME"
+          echo '#!/bin/bash' > dist/run-emwsmd-gui.command
+          echo 'cd "$(dirname "$0")"' >> dist/run-emwsmd-gui.command
+          echo './emwsmd-gui' >> dist/run-emwsmd-gui.command
+          chmod +x dist/run-emwsmd-gui.command
+
+      - name: macOS GUI Paket zippen
+        run: |
+          cp README-GUI.md dist/README-GUI.txt
+          cd dist
+          zip -r emwsmd-gui_${SYSTEM}.zip "$APP_NAME" run-emwsmd-gui.command README-GUI.txt
+
+      - name: macOS GUI Release Asset hochladen
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/emwsmd-gui_macos.zip
