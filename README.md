@@ -1,119 +1,149 @@
-emwsmd - Ey Mann, wo sind meine Drohnen!
-Version 3.2.0 Beta
-===========================================
 
+# 🛰️ emwsmd
+### *Ey Mann, wo sind meine Drohnen!*
 
+Ein EVE Online GUI-Tool, das deine Drohnen in **Stationen und Containern** zaehlt, dir zeigt wo sie liegen - und dich per Klick direkt dorthin routet.
 
+[![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows&logoColor=white)](#-download--start)
+[![Made for](https://img.shields.io/badge/EVE%20Online-ESI%20API-2C2C54?logo=eve-online&logoColor=white)](#)
+[![Build](https://img.shields.io/badge/Build-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](#-windows-release-build)
+[![License](https://img.shields.io/badge/Status-Aktiv-brightgreen)](#)
 
-         !!!  WICHTIGES VORWEG  !!!
-  !!!  GIB NIEMALS DEN TOKENCACHE WEITER  !!!
+</div>
 
+---
 
+## ✨ Was macht emwsmd?
 
+emwsmd durchsucht dein Charakter-Inventar ueber die EVE ESI-API und zaehlt **alle Drohnen, die in Stationen oder Containern liegen** – Drohnen im All werden nicht erfasst [file:1][code_file:9].
 
-Was macht dieses Tool?
------------------------
-emwsmd zaehlt ALLE deine Drohnen in EVE Online (egal ob Civilian, Mining,
-Salvage, Combat oder Heavy Sentry) und zeigt dir:
+<table>
+<tr>
+<td width="50%" valign="top">
 
-  - Wie viele Drohnen du insgesamt hast (nach Name gruppiert)
-  - An welcher Station/Struktur sie liegen
-  - Wie viel Transportvolumen du fuer den Abtransport brauchst
+**Die GUI zeigt dir:**
+- 🧮 Drohnen gesamt, nach Namen gruppiert
+- 🏠 Lagerort nach Station oder Struktur
+- 📦 benoetigtes Transportvolumen
+- 🚀 Jumps von deinem Standort zur Zielstation
+- 🧭 Route setzen / Waypoint hinzufuegen per Klick
 
-Das Ergebnis bekommst du als huebschen HTML-Bericht ("emwsmd Drohnenbericht"),
-den du einfach im Browser oeffnen kannst.
+</td>
+<td width="50%" valign="top">
 
-===========================================
-SCHRITT 1: emwsmd.exe zum ersten Mal starten
-===========================================
+**Auf einen Blick:**
+- Login per EVE SSO (Browser)
+- Zwei Ansichten: nach Name / nach Station
+- CSV- & HTML-Export
+- Direktes Routing an den Charakter im Spiel
+- Login-Button wird nach Login automatisch zu Logout
 
-1. Entpacke die ZIP-Datei in einen Ordner deiner Wahl (z.B. Desktop).
-2. Doppelklicke auf "emwsmd.exe".
-3. Es oeffnet sich ein schwarzes Konsolenfenster. Das ist normal!
-4. Es oeffnet sich automatisch dein Browser mit der Login-Seite.
-5. Logge dich mit dem Charakter ein, dessen Drohnen du zaehlen willst.
-6. Klicke auf "Autorisieren" / "Authorize".
-7. Der Browser zeigt "Autorisierung erfolgreich" - das Fenster kannst
-   du jetzt schliessen.
-8. Zurueck im Konsolenfenster siehst du die Drohnen-Auswertung.
-9. Im selben Ordner liegt jetzt eine Datei:
-       emwsmd_drohnenbericht.html
-   Doppelklicke sie - sie oeffnet sich in deinem Browser mit einer
-   schoenen Tabelle.
+</td>
+</tr>
+</table>
 
-===========================================
-SCHRITT 2: Spaetere Nutzung
-===========================================
+---
 
-Ab jetzt reicht ein einfacher Doppelklick auf "emwsmd.exe" - das Tool
-loggt sich automatisch mit dem gespeicherten Zugang ein und erstellt
-sofort den aktuellen Bericht. Kein erneutes Eintippen von Zugangsdaten
-oder Passwoertern notwendig.
+## 🖥️ Plattform-Status
 
-Falls dein Login mal abgelaufen ist (z.B. nach sehr langer Pause),
-oeffnet emwsmd automatisch wieder den Browser zum erneuten Einloggen -
-du musst nichts extra tun.
+| Plattform | Status | Weg |
+|---|---|---|
+| 🪟 **Windows** | ✅ Fertige Version | Release-ZIP herunterladen, `emwsmd-gui.exe` starten |
+| 🐧 Linux | 🔧 Vorerst kein Fertig-Build | `.py` direkt starten oder eigenen PyInstaller-Build erstellen |
+| 🍎 macOS | 🔧 Vorerst kein Fertig-Build | `.py` direkt starten oder eigenen PyInstaller-Build erstellen |
 
-===========================================
-Der Bericht: Was bedeuten die zwei Tabellen?
-===========================================
+Die Windows-.exe ist der **empfohlene Weg** fuer die meisten Nutzer [code_file:9].
 
-1. "Drohnen nach Name" (steht direkt offen)
-   Zeigt jede Drohnenart einzeln mit Anzahl und Volumen.
+---
 
-2. Button "Transport-Uebersicht pro Station anzeigen/verstecken"
-   Zeigt dir pro Station: Anzahl Drohnen + Gesamtvolumen.
-   Das brauchst du, um zu wissen, wie viel Frachtraum du fuer den
-   Abtransport von jeder Station einplanen musst.
+## ⚠️ Sicherheitshinweis
 
-===========================================
-Verknuepfung auf dem Desktop erstellen (optional)
-===========================================
+> ### 🔒 Gib **niemals** die Datei `tokencache` weiter.
+> Sie enthaelt deine lokal gespeicherten EVE-Login-Daten. Nicht in ZIPs, Discord, Support-Tickets oder Git-Repos hochladen [file:1][code_file:9].
 
-1. Rechtsklick auf "emwsmd.exe" -> "Verknuepfung erstellen".
-2. Verschiebe die Verknuepfung z.B. auf den Desktop.
-3. Fertig - Doppelklick auf die Verknuepfung startet das Tool.
+---
 
-Wenn du eine ZWEITE Verknuepfung fuer einen erneuten Login brauchst
-(z.B. um einen anderen Charakter zu hinterlegen):
+## 🚀 Download & Start
 
-1. Rechtsklick auf die Verknuepfung -> "Eigenschaften".
-2. Im Feld "Ziel" nach dem Pfad ein Leerzeichen und "install" anhaengen, z.B.:
-       "C:\Pfad\zu\emwsmd.exe" install
-3. Diese Verknuepfung startet dann immer den Login-Vorgang neu.
+### 🪟 Windows (empfohlen)
 
-===========================================
-Haeufige Probleme
-===========================================
+1. Neueste Release-ZIP von der [Releases-Seite](../../releases) herunterladen
+2. ZIP entpacken
+3. `emwsmd-gui.exe` doppelklicken
+4. Auf **Login (EVE SSO)** klicken → Browser oeffnet sich automatisch
+5. Charakter auswaehlen und autorisieren
+6. Zurueck in der App: **Drohnen scannen** klicken
 
-- "Es tut sich nichts nach dem Login im Browser":
-  Schlieﬂe das Browserfenster erst, wenn dort steht, dass die Autorisierung
-  erfolgreich war.
+### 🐧🍎 Linux / macOS
 
-- "Windows Defender / SmartScreen blockiert die exe":
-  Klicke auf "Weitere Informationen" und dann "Trotzdem ausfuehren".
-  Das passiert bei selbst erstellten .exe-Dateien ohne Code-Signatur,
-  ist aber unbedenklich, wenn du dem Ersteller vertraust.
+Noch kein fertiger Build – aber einfach selbst starten:
 
-- "Ich will nochmal von Null anfangen (alles zuruecksetzen)":
-  Loesche einfach die Datei "config.ini" im selben Ordner und starte
-  emwsmd.exe erneut - dann beginnt der Login wieder von vorne.
+```bash
+pip install "flet[all]" requests
+python emwsmd_GUI.3.2.4.py
+```
 
-===========================================
-Systemvoraussetzungen
-===========================================
+Oder eigenen Build erstellen:
 
-- Windows 10 oder Windows 11 (64-bit)
-- Internetverbindung
-- Ein EVE Online Account mit mindestens einem Charakter
+```bash
+pip install pyinstaller
+pyinstaller --onefile --windowed --name emwsmd-gui emwsmd_GUI.3.2.4.py
+```
 
-Kompatibel getestet fuer Windows 10 und Windows 11.
+---
 
-===========================================
-Kontakt / Support
-===========================================
+## 🧭 Erster Ablauf
 
-Bei Problemen: Screenshot vom Konsolenfenster machen und an den
-Ersteller des Tools schicken.
+```
+GUI starten
+   │
+   ▼
+Login (EVE SSO) klicken ──▶ Browser: Charakter waehlen + autorisieren
+   │
+   ▼
+Button wird zu "Logout" · "Drohnen scannen" wird aktiv
+   │
+   ▼
+Scan starten ──▶ Ansicht "Nach Drohnenname" oder "Nach Station"
+   │
+   ▼
+Optional: CSV/HTML exportieren oder Route/Waypoint direkt setzen
+```
 
-Viel Spass beim Drohnen-Zaehlen!
+---
+
+## 📍 Routing direkt aus der GUI
+
+Im Tab **Nach Station** hat jede Zeile zwei Aktions-Buttons [code_file:9]:
+
+| Button | Wirkung |
+|---|---|
+| 🧭 **Route setzen** | Setzt die Station als neues Ziel, loescht andere Wegpunkte |
+| ➕ **Waypoint hinzufuegen** | Haengt die Station an die bestehende Route an |
+
+Dafuer wird der Scope `esi-ui.write_waypoint.v1` benoetigt. Passt ein alter Token nicht mehr zu den benoetigten Scopes, wird er automatisch zurueckgesetzt und ein neuer Browser-Login angefordert – ganz ohne manuelles Aufraeumen [code_file:9].
+
+---
+
+## 📁 Inhalt des Windows-Pakets
+
+| Datei | Bedeutung |
+|---|---|
+| `emwsmd-gui.exe` | die fertige Windows-Anwendung |
+| `README.txt` | Kurzanleitung im Release-ZIP |
+| `tokencache` *(entsteht nach 1. Login)* | 🔒 lokaler Login-Cache – niemals weitergeben |
+| `emwsmd_gui_Bericht.html` | HTML-Export aus der Anwendung |
+| `emwsmd_gui_export.csv` | CSV-Export aus der Anwendung |
+
+---
+
+## 🛠️ Windows Release Build
+
+Die `.exe` wird automatisch per GitHub Actions gebaut, sobald ein Release veroeffentlicht wird: PyInstaller erstellt `emwsmd-gui.exe`, die App wird zusammen mit der README als `emwsmd-gui_windows.zip` an das Release angehaengt [code_file:9].
+
+---
+
+<div align="center">
+
+**Die GUI ist der Hauptpfad dieses Projekts.**
+Neue Features fliessen in die GUI – eine separate CLI wird nicht mehr aktiv weitergefuehrt.
