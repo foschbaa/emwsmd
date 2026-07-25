@@ -1,18 +1,33 @@
 """
-emwsmd_GUI.3.2.0.py
-Ey Mann, wo sind meine Drohnen! - GUI-Version (auf Basis von emwsmd.py v3.2.0)
+emwsmd_GUI.3.2.1.py
+Ey Mann, wo sind meine Drohnen! - GUI-Version (auf Basis von emwsmd_GUI.3.1.9.py)
 
 Eigenstaendige, komplette Anwendung: Auth, ESI-Abfrage, Datenaufbereitung UND GUI
 liegen in dieser einen Datei. Die Konsolen-Version wird nicht mehr separat benoetigt.
 
 Versionsschema fuer diese GUI-Reihe: emwsmd_GUI.<major>.<minor>.<patch>.py
-Diese Datei: emwsmd_GUI.3.2.0.py
+Diese Datei: emwsmd_GUI.3.2.1.py
 
 Installation (im aktivierten venv):
-    pip install "flet[all]" requests
+pip install "flet[all]" requests
 
 Start:
-    python "emwsmd_GUI.3.1.9.py"
+python "emwsmd_GUI.3.2.1.py"
+
+Changelog 3.2.0 -> 3.2.1:
+- NEU: Tab "Nach Station" bietet jetzt Routing-Buttons ("Route setzen" /
+  "Waypoint hinzufuegen"), um Wegpunkte direkt an den eingeloggten Charakter
+  im Spiel zu uebertragen (analog zu CorpDeliveries 1.1.x).
+- Neuer ESI-Call set_waypoint() (POST /ui/autopilot/waypoint/).
+- Neuer Scope esi-ui.write_waypoint.v1 in SCOPES aufgenommen.
+- Scope-Fingerprint wird in der Tokencache-Datei gespeichert. Weicht der
+  aktuell im Code definierte Scope-Satz vom gespeicherten Fingerprint ab
+  (z.B. weil esi-ui.write_waypoint.v1 neu hinzugekommen ist), wird der alte
+  refresh_token automatisch verworfen und ein frischer Login-Flow gestartet -
+  ohne dass man die Tokencache-Datei manuell loeschen muss.
+- by_station speichert jetzt zusaetzlich location_id/location_type je
+  Station, damit die Routing-Buttons wissen, wohin sie den Wegpunkt setzen
+  sollen.
 """
 
 import base64
@@ -33,12 +48,12 @@ import requests
 import flet as ft
 
 # ---------------------------------------------------------------------------
-# Konstanten (unveraendert aus emwsmd.py)
+# Konstanten
 # ---------------------------------------------------------------------------
 
 APP_NAME = "emwsmd_gui"
 APP_TAGLINE = "Ey Mann, wo sind meine Drohnen!"
-GUI_VERSION = "3.2.0"
+GUI_VERSION = "3.2.1"
 
 REPORT_TITLE = f"{APP_TAGLINE}"
 REPORT_FILENAME_DEFAULT = f"{APP_NAME}_Bericht.html"
@@ -55,6 +70,7 @@ SCOPES = [
     "esi-assets.read_assets.v1",
     "esi-location.read_location.v1",
     "esi-universe.read_structures.v1",
+    "esi-ui.write_waypoint.v1",
 ]
 
 CONFIG_PATH_DEFAULT = "tokencache"
@@ -63,9 +79,8 @@ CALLBACK_SERVER_TIMEOUT = 60
 # HIER DEINE FESTE APP-ID EINTRAGEN
 APP_CLIENT_ID = "29700e84fef64d7aa0a5f9bbc49f81cc"
 
-
 # ---------------------------------------------------------------------------
-# Auth (unveraendert aus emwsmd.py)
+# Auth
 # ---------------------------------------------------------------------------
 
 class EveAuthPKCE:
@@ -95,6 +110,24 @@ class EveAuthPKCE:
         except ValueError:
             self._expires_at = 0
         self._code_verifier = None
+
+    def scopes_fingerprint(self):
+        return hashlib.sha256(" ".join(sorted(SCOPES)).encode("utf-8")).hexdigest()
+
+    def scopes_match_cache(self):
+        stored = self.config["eve_esi"].get("scopes_fingerprint", "").strip()
+        return stored == self.scopes_fingerprint()
+
+    def invalidate_tokens(self):
+        """Verwirft refresh_token/access_token lokal (z.B. bei Scope-Mismatch)."""
+        self.refresh_token = ""
+        self._access_token = None
+        self._expires_at = 0
+        self.config["eve_esi"]["refresh_token"] = ""
+        self.config["eve_token_cache"]["access_token"] = ""
+        self.config["eve_token_cache"]["expires_at"] = "0"
+        with open(self.config_path, "w", encoding="utf-8") as f:
+            self.config.write(f)
 
     def has_client_id(self):
         return bool(self.client_id and self.client_id != "DEINE_CLIENT_ID_HIER")
@@ -130,6 +163,7 @@ class EveAuthPKCE:
         self._expires_at = time.time() + expires_in - 30
         self.refresh_token = refresh_token
         self.config["eve_esi"]["refresh_token"] = refresh_token
+        self.config["eve_esi"]["scopes_fingerprint"] = self.scopes_fingerprint()
         self.config["eve_token_cache"]["access_token"] = access_token
         self.config["eve_token_cache"]["expires_at"] = str(self._expires_at)
         self.config["eve_token_cache"]["refresh_token"] = refresh_token
@@ -180,7 +214,6 @@ class EveAuthPKCE:
     def _refresh_access_token(self):
         if not self.refresh_token:
             raise RuntimeError("Kein refresh_token vorhanden. Login erforderlich.")
-            page.update()
         headers = {"Content-Type": "application/x-www-form-urlencoded", "Host": "login.eveonline.com"}
         data = {
             "grant_type": "refresh_token",
@@ -224,23 +257,22 @@ class _CallbackHandler(http.server.BaseHTTPRequestHandler):
 
         body = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
-<body style="margin:0;display:grid;place-items:center;height:100vh;
-background:#1b1b1b;color:#e5e5e5;font:16px system-ui,sans-serif;">
-<div style="padding:2rem 2.5rem;background:#252525;border:1px solid #3a3a3a;
-border-radius:12px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.35);">
-<h2 style="margin:0 0 .75rem">{APP_TAGLINE}</h2>
+<body style="margin:0;display:grid;place-items:center;height:100vh;background:#1b1b1b;color:#e5e5e5;font:16px system-ui,sans-serif;">
+<div style="padding:2rem 2.5rem;background:#252525;border:1px solid #3a3a3a;border-radius:12px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.35);">
+<h2 style="margin:0 0 .75rem;">{APP_TAGLINE}</h2>
 <div>Autorisierung erfolgreich.</div>
-<div style="margin-top:.5rem;color:#b0b0b0">Dieses Fenster kann geschlossen werden.</div>
+<div style="margin-top:.5rem;color:#b0b0b0;">Dieses Fenster kann geschlossen werden.</div>
 </div></body></html>""".encode("utf-8")
 
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Connection", "close")  # verhindert Keep-Alive-Wartezeit beim Client
+        self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(body)
-        self.close_connection = True  # Server soll die Verbindung sofort beenden, nicht auf weitere Requests warten
+        self.close_connection = True
         return
+
     def log_message(self, format, *args):
         pass
 
@@ -249,7 +281,7 @@ def run_login_flow(auth, log=print, open_browser=True):
     if not auth.has_client_id():
         raise RuntimeError("APP_CLIENT_ID ist noch nicht gesetzt.")
 
-    _auth_code_holder.pop("code", None)  # alten Code aus einem frueheren Versuch verwerfen
+    _auth_code_holder.pop("code", None)
 
     authorize_url = auth.get_authorize_url(REDIRECT_URI, SCOPES)
     log("Oeffne Login-Seite im Browser ...")
@@ -261,18 +293,16 @@ def run_login_flow(auth, log=print, open_browser=True):
 
     http.server.HTTPServer.allow_reuse_address = True
     server = http.server.HTTPServer(("localhost", CALLBACK_PORT), _CallbackHandler)
-    server.timeout = 1  # kurze Zyklen statt einem langen Block, damit wir sofort reagieren koennen
+    server.timeout = 1
     log(f"Warte bis zu {CALLBACK_SERVER_TIMEOUT} Sekunden auf Autorisierung im Browser ...")
 
     deadline = time.time() + CALLBACK_SERVER_TIMEOUT
     code = None
     while time.time() < deadline:
-        server.handle_request()  # kehrt nach 1s zurueck, falls keine Anfrage ankam
+        server.handle_request()
         code = _auth_code_holder.get("code")
         if code:
             break
-        # Falls eine irrelevante Anfrage (z.B. favicon.ico) den einzigen Request "verbraucht" hat,
-        # machen wir einfach im naechsten Zyklus weiter und warten auf die echte /callback-Anfrage.
 
     server.server_close()
 
@@ -285,6 +315,14 @@ def run_login_flow(auth, log=print, open_browser=True):
 
 
 def ensure_authenticated(auth, log=print):
+    if auth.has_refresh_token() and not auth.scopes_match_cache():
+        log(
+            "Gespeicherter Token passt nicht zu den aktuell benoetigten Scopes "
+            "(z.B. esi-ui.write_waypoint.v1 wurde neu hinzugefuegt). "
+            "Es wird automatisch ein neuer Login angefordert ..."
+        )
+        auth.invalidate_tokens()
+
     if not auth.has_refresh_token():
         run_login_flow(auth, log=log)
         return
@@ -296,7 +334,7 @@ def ensure_authenticated(auth, log=print):
 
 
 # ---------------------------------------------------------------------------
-# ESI-Datenlogik (unveraendert aus emwsmd.py, mit optionalem progress-callback)
+# ESI-Datenlogik
 # ---------------------------------------------------------------------------
 
 def get_all_drone_type_ids():
@@ -406,7 +444,7 @@ def get_jump_count(origin_system_id, destination_system_id, cache):
     return jumps
 
 
-def get_location_name(location_id, location_type, auth, cache, _error_count=None):
+def get_location_name(location_id, location_type, auth, cache):
     if location_id in cache:
         return cache[location_id]
     name = f"Unbekannte Struktur {location_id}"
@@ -420,7 +458,10 @@ def get_location_name(location_id, location_type, auth, cache, _error_count=None
             if r.status_code == 200:
                 name = r.json()["name"]
             else:
-                r = requests.get(f"{ESI_BASE}/universe/structures/{location_id}/", headers=auth.get_auth_header(), timeout=15)
+                r = requests.get(
+                    f"{ESI_BASE}/universe/structures/{location_id}/",
+                    headers=auth.get_auth_header(), timeout=15,
+                )
                 if r.status_code == 200:
                     name = r.json()["name"]
     except requests.RequestException:
@@ -429,12 +470,27 @@ def get_location_name(location_id, location_type, auth, cache, _error_count=None
     return name
 
 
+def set_waypoint(destination_id, auth, clear_other_waypoints=True, add_to_beginning=True):
+    """POST /ui/autopilot/waypoint/ - benoetigt Scope esi-ui.write_waypoint.v1."""
+    params = {
+        "destination_id": destination_id,
+        "clear_other_waypoints": str(clear_other_waypoints).lower(),
+        "add_to_beginning": str(add_to_beginning).lower(),
+    }
+    r = requests.post(
+        f"{ESI_BASE}/ui/autopilot/waypoint/",
+        headers=auth.get_auth_header(),
+        params=params,
+        timeout=15,
+    )
+    r.raise_for_status()
+    return True
+
+
 def count_drones(character_id, auth, progress=None):
     """
     progress(phase: str, msg: str, current: int|None, total: int|None) wird waehrend der
     Verarbeitung aufgerufen. phase ist einer von: "types", "inventory", "routes".
-    current/total = None bedeutet: unbestimmter Fortschritt (Phase hat keine bekannte Groesse).
-    Die GUI zeigt pro Phase eine eigene Anzeige (siehe build_gui).
     """
     def report(phase, msg, current=None, total=None):
         if progress:
@@ -492,7 +548,16 @@ def count_drones(character_id, auth, progress=None):
             except requests.RequestException:
                 pass
 
-        sentry = by_station.setdefault(station_name, {"qty": 0, "volume": 0.0, "jumps": jumps})
+        sentry = by_station.setdefault(
+            station_name,
+            {
+                "qty": 0,
+                "volume": 0.0,
+                "jumps": jumps,
+                "location_id": root_id,
+                "location_type": root_type,
+            },
+        )
         if sentry.get("jumps") is None and jumps is not None:
             sentry["jumps"] = jumps
         sentry["qty"] += qty
@@ -628,6 +693,7 @@ def main(page: ft.Page):
             ft.DataColumn(ft.Text("Jumps"), numeric=True),
             ft.DataColumn(ft.Text("Anzahl Drohnen"), numeric=True),
             ft.DataColumn(ft.Text("Volumen (m3)"), numeric=True),
+            ft.DataColumn(ft.Text("Route")),
         ],
         rows=[],
     )
@@ -673,12 +739,10 @@ def main(page: ft.Page):
     def on_progress_message(message):
         if message.get("topic") != "progress":
             return
-
         progress_state["phase"] = message.get("phase")
         progress_state["msg"] = message.get("msg", "")
         progress_state["current"] = message.get("current")
         progress_state["total"] = message.get("total")
-
         apply_progress()
         page.update()
 
@@ -686,7 +750,6 @@ def main(page: ft.Page):
 
     def set_busy(is_busy: bool):
         busy["value"] = is_busy
-
         login_btn.disabled = is_busy
         scan_btn.disabled = is_busy or auth_holder["auth"] is None
         export_csv_btn.disabled = is_busy or not result_holder["by_name"]
@@ -711,39 +774,66 @@ def main(page: ft.Page):
         page.update()
 
     def gui_progress_callback(phase, msg, current, total):
-        """
-        PubSub-Callback: der Worker-Thread publiziert nur Daten, die GUI aktualisiert
-        im Haupt-Event-Loop.
-        """
-        page.pubsub.send_all({"topic": "progress", "phase": phase, "msg": msg, "current": current, "total": total,})
+        page.pubsub.send_all({"topic": "progress", "phase": phase, "msg": msg, "current": current, "total": total})
+
+    def do_set_waypoint(location_id, clear, prepend, label):
+        auth = auth_holder["auth"]
+        if auth is None:
+            set_status("Bitte zuerst einloggen.", error=True)
+            return
+
+        def worker():
+            try:
+                set_waypoint(location_id, auth, clear_other_waypoints=clear, add_to_beginning=prepend)
+                page.pubsub.send_all({
+                    "topic": "route", "kind": "status",
+                    "msg": f"{label}: Wegpunkt uebertragen.", "error": False,
+                })
+            except requests.exceptions.HTTPError as ex:
+                code = ex.response.status_code if ex.response is not None else "?"
+                if code == 401:
+                    msg = ("Kein Zugriff (401): Scope esi-ui.write_waypoint.v1 fehlt "
+                           "vermutlich noch im Token. Bitte neu einloggen.")
+                else:
+                    msg = f"ESI-Fehler beim Setzen des Wegpunkts ({code})."
+                page.pubsub.send_all({"topic": "route", "kind": "status", "msg": msg, "error": True})
+            except Exception as ex:
+                page.pubsub.send_all({
+                    "topic": "route", "kind": "status",
+                    "msg": f"Fehler beim Setzen des Wegpunkts: {ex}", "error": True,
+                })
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def on_route_message(message):
+        if message.get("topic") != "route":
+            return
+        if message.get("kind") == "status":
+            set_status(message.get("msg", ""), error=message.get("error", False))
+
+    page.pubsub.subscribe(on_route_message)
 
     def on_login_message(message):
         if message.get("topic") != "login":
             return
-
         kind = message.get("kind")
 
         if kind == "busy_start":
             set_busy(True)
             return
-
         if kind == "busy_done":
             set_busy(False)
             return
-
         if kind == "status":
             set_status(message.get("msg", ""), error=message.get("error", False))
             return
-
         if kind == "login_success":
             char_id = message.get("char_id")
             char_name = message.get("char_name")
-
             if char_name:
                 character_text.value = f"Angemeldet als {char_name} (Character-ID: {char_id})"
             else:
                 character_text.value = f"Angemeldet (Character-ID: {char_id})"
-
             status_text.value = "Login erfolgreich."
             status_text.color = ft.Colors.GREY_400
             scan_btn.disabled = False
@@ -751,7 +841,6 @@ def main(page: ft.Page):
             export_html_btn.disabled = not result_holder["by_name"]
             page.update()
             return
-
         if kind == "login_error":
             character_text.value = "Nicht angemeldet."
             status_text.value = message.get("msg", "Login fehlgeschlagen.")
@@ -764,29 +853,70 @@ def main(page: ft.Page):
 
     page.pubsub.subscribe(on_login_message)
 
+    def build_station_rows(by_station):
+        rows = []
+        for station, data in sorted(
+            by_station.items(),
+            key=lambda item: (
+                item[1].get("jumps") is None,
+                item[1].get("jumps") if item[1].get("jumps") is not None else 999999,
+                item[0].lower(),
+            ),
+        ):
+            location_id = data.get("location_id")
+
+            def make_handlers(loc_id=location_id, label=station):
+                def set_dest(e):
+                    do_set_waypoint(loc_id, clear=True, prepend=True, label=label)
+
+                def add_wp(e):
+                    do_set_waypoint(loc_id, clear=False, prepend=False, label=label)
+
+                return set_dest, add_wp
+
+            set_dest, add_wp = make_handlers()
+
+            route_cell = ft.Row(
+                [
+                    ft.IconButton(icon=ft.Icons.EXPLORE, tooltip="Route setzen", on_click=set_dest,
+                                  disabled=location_id is None),
+                    ft.IconButton(icon=ft.Icons.ADD_LOCATION_ALT, tooltip="Waypoint hinzufuegen", on_click=add_wp,
+                                  disabled=location_id is None),
+                ],
+                spacing=0,
+            )
+
+            rows.append(
+                ft.DataRow(cells=[
+                    ft.DataCell(ft.Text(station)),
+                    ft.DataCell(ft.Text(
+                        str(data.get("jumps")) if data.get("jumps") is not None else "unbekannt"
+                    )),
+                    ft.DataCell(ft.Text(str(data["qty"]))),
+                    ft.DataCell(ft.Text(f"{data['volume']:.2f}")),
+                    ft.DataCell(route_cell),
+                ])
+            )
+        return rows
+
     def on_scan_message(message):
         if message.get("topic") != "scan":
             return
-
         kind = message.get("kind")
 
         if kind == "busy_start":
             set_busy(True)
             return
-
         if kind == "busy_done":
             set_busy(False)
             return
-
         if kind == "status":
             set_status(message.get("msg", ""), error=message.get("error", False))
             return
-
         if kind == "character_resolved":
             character_text.value = message.get("text", character_text.value)
             page.update()
             return
-
         if kind == "scan_result":
             total = message["total"]
             by_name = message["by_name"]
@@ -806,26 +936,9 @@ def main(page: ft.Page):
                 for name, data in sorted(by_name.items())
             ]
 
-            station_table.rows = [
-                ft.DataRow(cells=[
-                    ft.DataCell(ft.Text(station)),
-                    ft.DataCell(ft.Text(
-                        str(data.get("jumps")) if data.get("jumps") is not None else "unbekannt"
-                    )),
-                    ft.DataCell(ft.Text(str(data["qty"]))),
-                    ft.DataCell(ft.Text(f"{data['volume']:.2f}")),
-                ])
-                for station, data in sorted(
-                    by_station.items(),
-                    key=lambda item: (
-                        item[1].get("jumps") is None,
-                        item[1].get("jumps") if item[1].get("jumps") is not None else 999999,
-                        item[0].lower(),
-                    ),
-                )
-            ]
+            station_table.rows = build_station_rows(by_station)
 
-            total_text.value = f"Gesamtanzahl aller Drohnen: {total}  |  Stationen: {len(by_station)}"
+            total_text.value = f"Gesamtanzahl aller Drohnen: {total} | Stationen: {len(by_station)}"
 
             export_csv_btn.disabled = False
             export_html_btn.disabled = False
@@ -833,7 +946,7 @@ def main(page: ft.Page):
             page.update()
             return
 
-    page.pubsub.subscribe(on_scan_message)    
+    page.pubsub.subscribe(on_scan_message)
 
     def do_login(e):
         set_busy(True)
@@ -845,15 +958,13 @@ def main(page: ft.Page):
 
                 if auth.has_refresh_token():
                     page.pubsub.send_all({
-                        "topic": "login",
-                        "kind": "status",
+                        "topic": "login", "kind": "status",
                         "msg": "Vorhandener Tokencache gefunden, pruefe/erneuere Zugang ...",
                         "error": False,
                     })
                 else:
                     page.pubsub.send_all({
-                        "topic": "login",
-                        "kind": "status",
+                        "topic": "login", "kind": "status",
                         "msg": "Kein Tokencache vorhanden, oeffne Login-Seite im Browser ...",
                         "error": False,
                     })
@@ -861,10 +972,7 @@ def main(page: ft.Page):
                 ensure_authenticated(
                     auth,
                     log=lambda m: page.pubsub.send_all({
-                        "topic": "login",
-                        "kind": "status",
-                        "msg": m,
-                        "error": False,
+                        "topic": "login", "kind": "status", "msg": m, "error": False,
                     }),
                 )
 
@@ -877,24 +985,17 @@ def main(page: ft.Page):
                     pass
 
                 page.pubsub.send_all({
-                    "topic": "login",
-                    "kind": "login_success",
-                    "char_id": char_id,
-                    "char_name": char_name,
+                    "topic": "login", "kind": "login_success",
+                    "char_id": char_id, "char_name": char_name,
                 })
-
             except Exception as ex:
                 auth_holder["auth"] = None
                 page.pubsub.send_all({
-                    "topic": "login",
-                    "kind": "login_error",
+                    "topic": "login", "kind": "login_error",
                     "msg": f"Login fehlgeschlagen: {ex}",
                 })
             finally:
-                page.pubsub.send_all({
-                    "topic": "login",
-                    "kind": "busy_done",
-                })
+                page.pubsub.send_all({"topic": "login", "kind": "busy_done"})
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -908,12 +1009,7 @@ def main(page: ft.Page):
 
         def worker():
             try:
-                page.pubsub.send_all({
-                    "topic": "scan",
-                    "kind": "status",
-                    "msg": "Scan gestartet ...",
-                    "error": False,
-                })
+                page.pubsub.send_all({"topic": "scan", "kind": "status", "msg": "Scan gestartet ...", "error": False})
 
                 character_id = auth.get_character_id()
                 last_id, last_name = auth.get_last_char()
@@ -923,43 +1019,32 @@ def main(page: ft.Page):
                         resolved_name = get_character_name(character_id)
                         auth.set_last_char(character_id, resolved_name)
                         page.pubsub.send_all({
-                            "topic": "scan",
-                            "kind": "character_resolved",
+                            "topic": "scan", "kind": "character_resolved",
                             "text": f"Angemeldet als {resolved_name} (Character-ID: {character_id})",
                         })
                     except Exception:
                         pass
 
-                total, by_name, by_station = count_drones(
-                    character_id, auth, progress=gui_progress_callback
-                )
+                total, by_name, by_station = count_drones(character_id, auth, progress=gui_progress_callback)
 
                 page.pubsub.send_all({
-                    "topic": "scan",
-                    "kind": "scan_result",
-                    "total": total,
-                    "by_name": by_name,
-                    "by_station": by_station,
+                    "topic": "scan", "kind": "scan_result",
+                    "total": total, "by_name": by_name, "by_station": by_station,
                 })
-
                 page.pubsub.send_all({
-                    "topic": "scan",
-                    "kind": "status",
+                    "topic": "scan", "kind": "status",
                     "msg": f"Fertig: {len(by_name)} Drohnentypen, {len(by_station)} Stationen geladen.",
                     "error": False,
                 })
-
             except requests.exceptions.Timeout:
                 page.pubsub.send_all({
-                    "topic": "scan",
-                    "kind": "status",
+                    "topic": "scan", "kind": "status",
                     "msg": "EVE-Server antwortet nicht (Zeitueberschreitung). Bitte spaeter erneut versuchen.",
                     "error": True,
                 })
             except requests.exceptions.ConnectionError:
                 page.pubsub.send_all({
-                    "topic": "scan",
-                    "kind": "status",
+                    "topic": "scan", "kind": "status",
                     "msg": "Keine Verbindung zu EVE Online moeglich. Internet pruefen und erneut versuchen.",
                     "error": True,
                 })
@@ -973,25 +1058,13 @@ def main(page: ft.Page):
                     msg = "Anmeldung abgelaufen oder ungueltig. Bitte erneut einloggen."
                 else:
                     msg = f"EVE-Server-Fehler ({status_code}). Bitte erneut versuchen."
-
-                page.pubsub.send_all({
-                    "topic": "scan",
-                    "kind": "status",
-                    "msg": msg,
-                    "error": True,
-                })
+                page.pubsub.send_all({"topic": "scan", "kind": "status", "msg": msg, "error": True})
             except Exception as ex:
                 page.pubsub.send_all({
-                    "topic": "scan",
-                    "kind": "status",
-                    "msg": f"Unerwarteter Fehler: {ex}",
-                    "error": True,
+                    "topic": "scan", "kind": "status", "msg": f"Unerwarteter Fehler: {ex}", "error": True,
                 })
             finally:
-                page.pubsub.send_all({
-                    "topic": "scan",
-                    "kind": "busy_done",
-                })
+                page.pubsub.send_all({"topic": "scan", "kind": "busy_done"})
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1031,9 +1104,6 @@ def main(page: ft.Page):
     export_html_btn.on_click = export_html
 
     def check_existing_session():
-        # Rein lokale Pruefung ohne Netzwerkzugriff: Tokencache + [last_char]-Rubrik werden gelesen.
-        # Kein Refresh, keine Namensaufloesung per API beim Start - das passiert erst bei Bedarf
-        # (Login-Klick bzw. Scan), damit der Start sofort reagiert.
         try:
             auth = EveAuthPKCE()
             if not auth.has_refresh_token():
@@ -1044,8 +1114,6 @@ def main(page: ft.Page):
             auth_holder["auth"] = auth
             last_id, last_name = auth.get_last_char()
 
-            # Falls ein noch gueltiger Access-Token im Cache liegt, koennen wir die ID lokal aus dem
-            # JWT lesen (kein Netzwerk) und mit [last_char] abgleichen.
             jwt_char_id = None
             if auth._access_token:
                 try:
@@ -1054,7 +1122,6 @@ def main(page: ft.Page):
                     jwt_char_id = None
 
             if jwt_char_id is not None and last_id is not None and jwt_char_id != last_id:
-                # ID im Token passt nicht mehr zu [last_char] -> veralteten Eintrag verwerfen
                 auth.clear_last_char()
                 last_id, last_name = None, None
 
@@ -1070,7 +1137,7 @@ def main(page: ft.Page):
             character_text.value = "Nicht angemeldet."
         page.update()
 
-    check_existing_session()  # synchron und lokal, kein Thread noetig - dauert nur Millisekunden
+    check_existing_session()
 
     page.add(
         ft.Row(
@@ -1093,3 +1160,4 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     _launch_flet_app(main)
+
