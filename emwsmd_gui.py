@@ -1,18 +1,65 @@
 """
-emwsmd_GUI.3.2.1.py
+emwsmd_GUI.3.2.4.py
 Ey Mann, wo sind meine Drohnen! - GUI-Version (auf Basis von emwsmd_GUI.3.1.9.py)
 
 Eigenstaendige, komplette Anwendung: Auth, ESI-Abfrage, Datenaufbereitung UND GUI
 liegen in dieser einen Datei. Die Konsolen-Version wird nicht mehr separat benoetigt.
 
 Versionsschema fuer diese GUI-Reihe: emwsmd_GUI.<major>.<minor>.<patch>.py
-Diese Datei: emwsmd_GUI.3.2.1.py
+Diese Datei: emwsmd_GUI.3.2.4.py
 
 Installation (im aktivierten venv):
 pip install "flet[all]" requests
 
 Start:
-python "emwsmd_GUI.3.2.1.py"
+python "emwsmd_GUI.3.2.4.py"
+
+Changelog 3.2.3 -> 3.2.4:
+- NEU: "Drohnen scannen" ist beim Programmstart deaktiviert und wird erst
+  nach erfolgreichem Login aktiviert (war vorher teils schon vor dem
+  ersten echten Login freigeschaltet, wenn nur ein Tokencache vorlag).
+- NEU: Der Login-Button wird nach erfolgreichem Login automatisch zu einem
+  Logout-Button ("Logout", Icon LOGOUT). Ein Klick darauf ruft do_logout()
+  auf, welches denselben zentralen Reset-Mechanismus (reset_login_ui_to_
+  logged_out) nutzt wie ein automatischer Token-Invalidate bei
+  Scope-Mismatch/401. Nach Logout schaltet der Button automatisch wieder
+  auf "Login (EVE SSO)" zurueck und "Drohnen scannen" wird gesperrt.
+- reset_login_ui_to_logged_out() ist jetzt eine einzige zentrale Funktion
+  auf main()-Ebene (vorher lokal in do_set_waypoint dupliziert) und wird
+  von Token-Fehlerpfaden UND vom expliziten Logout-Klick gemeinsam genutzt.
+- check_existing_session() setzt beim Start bei vorhandenem, scope-
+  passendem Tokencache den Button direkt korrekt auf "Logout".
+
+Changelog 3.2.2 -> 3.2.3:
+- BUGFIX: scopes_fingerprint wurde bisher bei JEDEM Token-Refresh (nicht nur
+  beim vollen Login) neu geschrieben. Dadurch wurde ein Scope-Mismatch nach
+  dem ersten Refresh faelschlich als "passt schon" markiert -> der 401-Fehler
+  bei /ui/autopilot/waypoint/ kam bei jedem weiteren Versuch wieder,
+  ein neuer Login wurde nie ausgeloest. _save_tokens() erhaelt jetzt ein
+  stamp_scopes-Flag: nur exchange_code_for_token() (voller Login) darf den
+  Fingerprint stempeln, _refresh_access_token() (reiner Refresh) nicht.
+- BUGFIX: Nach invalidate_tokens() (Scope-Mismatch oder 401) wurde die GUI
+  nicht zurueckgesetzt, wodurch ein Folgeklick auf "Route setzen" auf
+  "Kein refresh_token vorhanden" lief und als kryptisches "Unerwarteter
+  Fehler" angezeigt wurde. Die Oberflaeche wird jetzt bei jedem
+  Token-Invalidate sofort und eindeutig auf "Nicht angemeldet"
+  zurueckgesetzt (Login-Button aktiv, Scan-/Export-Buttons gesperrt) und
+  zeigt eine klare Statusmeldung statt eines generischen Fehlers.
+- Waypoint-Buttons sperren waehrend eines automatisch ausgeloesten
+  Re-Logins jetzt die restliche Oberflaeche (busy-Status), damit keine
+  parallelen Aktionen den Ablauf stoeren.
+
+Changelog 3.2.1 -> 3.2.2:
+- BUGFIX: Scope-Mismatch (401 bei /ui/autopilot/waypoint/) trotz "gueltigem"
+  Access-Token behoben. Ursache: get_access_token() prueft nur die zeitliche
+  Gueltigkeit, nicht den Scope-Fingerprint. War man bereits eingeloggt
+  (Access-Token noch nicht abgelaufen) und hat NICHT erneut auf "Login"
+  geklickt, wurde der alte Token (ohne esi-ui.write_waypoint.v1) fuer den
+  Waypoint-Call weiterverwendet -> 401.
+- Der Scope-Fingerprint wird jetzt zusaetzlich direkt vor jedem
+  Routing-Button-Klick (Route setzen / Waypoint hinzufuegen) sowie beim
+  App-Start (check_existing_session) geprueft. Bei Mismatch wird der Token
+  verworfen und automatisch ein neuer Browser-Login-Flow gestartet.
 
 Changelog 3.2.0 -> 3.2.1:
 - NEU: Tab "Nach Station" bietet jetzt Routing-Buttons ("Route setzen" /
@@ -53,7 +100,7 @@ import flet as ft
 
 APP_NAME = "emwsmd_gui"
 APP_TAGLINE = "Ey Mann, wo sind meine Drohnen!"
-GUI_VERSION = "3.2.1"
+GUI_VERSION = "3.2.4"
 
 REPORT_TITLE = f"{APP_TAGLINE}"
 REPORT_FILENAME_DEFAULT = f"{APP_NAME}_Bericht.html"
@@ -158,12 +205,21 @@ class EveAuthPKCE:
         with open(self.config_path, "w", encoding="utf-8") as f:
             self.config.write(f)
 
-    def _save_tokens(self, access_token, expires_in, refresh_token):
+    def _save_tokens(self, access_token, expires_in, refresh_token, stamp_scopes=True):
+        # stamp_scopes=True bedeutet: dieser Token wurde ueber den VOLLEN
+        # Authorization-Code-Flow erteilt, also mit exakt den aktuell in
+        # SCOPES definierten Berechtigungen. Ein simpler Token-REFRESH
+        # (grant_type=refresh_token) behaelt dagegen die Scopes des
+        # urspruenglichen Logins bei - hier darf der Fingerprint NICHT
+        # ueberschrieben werden, sonst wuerde ein Scope-Mismatch faelschlich
+        # als "passt schon" markiert und der 401 taucht immer wieder auf,
+        # ohne dass je ein neuer Login ausgeloest wird.
         self._access_token = access_token
         self._expires_at = time.time() + expires_in - 30
         self.refresh_token = refresh_token
         self.config["eve_esi"]["refresh_token"] = refresh_token
-        self.config["eve_esi"]["scopes_fingerprint"] = self.scopes_fingerprint()
+        if stamp_scopes:
+            self.config["eve_esi"]["scopes_fingerprint"] = self.scopes_fingerprint()
         self.config["eve_token_cache"]["access_token"] = access_token
         self.config["eve_token_cache"]["expires_at"] = str(self._expires_at)
         self.config["eve_token_cache"]["refresh_token"] = refresh_token
@@ -208,7 +264,9 @@ class EveAuthPKCE:
         resp = requests.post(TOKEN_URL, headers=headers, data=data, timeout=15)
         resp.raise_for_status()
         payload = resp.json()
-        self._save_tokens(payload["access_token"], payload["expires_in"], payload["refresh_token"])
+        # Voller Authorization-Code-Flow -> Scope-Fingerprint darf gestempelt werden.
+        self._save_tokens(payload["access_token"], payload["expires_in"], payload["refresh_token"],
+                           stamp_scopes=True)
         return payload
 
     def _refresh_access_token(self):
@@ -223,8 +281,10 @@ class EveAuthPKCE:
         resp = requests.post(TOKEN_URL, headers=headers, data=data, timeout=15)
         resp.raise_for_status()
         payload = resp.json()
+        # Reiner Token-Refresh -> traegt KEINE neuen Scopes ein, Fingerprint bleibt unangetastet.
         self._save_tokens(
-            payload["access_token"], payload["expires_in"], payload.get("refresh_token", self.refresh_token)
+            payload["access_token"], payload["expires_in"], payload.get("refresh_token", self.refresh_token),
+            stamp_scopes=False,
         )
         return payload["access_token"]
 
@@ -673,6 +733,7 @@ def main(page: ft.Page):
     )
 
     login_btn = ft.Button("Login (EVE SSO)", icon=ft.Icons.LOGIN)
+    logged_in_state = {"value": False}
     scan_btn = ft.Button("Drohnen scannen", icon=ft.Icons.RADAR, disabled=True)
     export_csv_btn = ft.OutlinedButton("Export CSV", icon=ft.Icons.TABLE_VIEW, disabled=True)
     export_html_btn = ft.OutlinedButton("Export HTML", icon=ft.Icons.HTML, disabled=True)
@@ -776,6 +837,35 @@ def main(page: ft.Page):
     def gui_progress_callback(phase, msg, current, total):
         page.pubsub.send_all({"topic": "progress", "phase": phase, "msg": msg, "current": current, "total": total})
 
+    def reset_login_ui_to_logged_out(reason_msg):
+        # Zentrale Funktion, um die Oberflaeche eindeutig auf "nicht angemeldet"
+        # zurueckzusetzen. Wird sowohl bei Token-Problemen (Scope-Mismatch/401)
+        # als auch beim expliziten Logout-Klick verwendet.
+        page.pubsub.send_all({
+            "topic": "login", "kind": "login_error",
+            "msg": reason_msg,
+        })
+
+    def do_logout(e):
+        # Nutzt exakt denselben Reset-Mechanismus wie ein Token-Invalidate durch
+        # Scope-Mismatch/401 - der Login-Button fungiert nach erfolgreichem
+        # Login als Logout-Button.
+        auth = auth_holder["auth"]
+        if auth is not None:
+            try:
+                auth.invalidate_tokens()
+                auth.clear_last_char()
+            except Exception:
+                pass
+        auth_holder["auth"] = None
+        result_holder["total"] = 0
+        result_holder["by_name"] = {}
+        result_holder["by_station"] = {}
+        name_table.rows = []
+        station_table.rows = []
+        total_text.value = ""
+        reset_login_ui_to_logged_out("Abgemeldet. Bitte erneut einloggen, um fortzufahren.")
+
     def do_set_waypoint(location_id, clear, prepend, label):
         auth = auth_holder["auth"]
         if auth is None:
@@ -783,7 +873,62 @@ def main(page: ft.Page):
             return
 
         def worker():
+            page.pubsub.send_all({"topic": "route", "kind": "busy_start"})
             try:
+                # Scope-Check VOR dem eigentlichen ESI-Call: ein noch gueltiger
+                # (nicht abgelaufener) access_token wird von get_access_token()
+                # sonst einfach weiterverwendet, auch wenn er mit einem alten
+                # Scope-Set (ohne esi-ui.write_waypoint.v1) ausgestellt wurde.
+                # Das fuehrt zu 401, obwohl "eigentlich" eingeloggt ist.
+                if not auth.scopes_match_cache():
+                    page.pubsub.send_all({
+                        "topic": "route", "kind": "status",
+                        "msg": ("Berechtigungen veraltet (Scope-Mismatch). Token wird "
+                                "zurueckgesetzt, Login-Seite oeffnet sich im Browser ..."),
+                        "error": False,
+                    })
+                    auth.invalidate_tokens()
+                    # GUI sofort eindeutig auf "nicht angemeldet" zuruecksetzen,
+                    # statt stillschweigend im Hintergrund weiterzumachen.
+                    reset_login_ui_to_logged_out(
+                        "Token zurueckgesetzt (Scope-Mismatch). Warte auf Login im Browser ..."
+                    )
+
+                    try:
+                        ensure_authenticated(
+                            auth,
+                            log=lambda m: page.pubsub.send_all({
+                                "topic": "route", "kind": "status", "msg": m, "error": False,
+                            }),
+                        )
+                    except Exception as auth_ex:
+                        reset_login_ui_to_logged_out(
+                            f"Neuer Login fehlgeschlagen: {auth_ex}. Bitte Login-Button erneut klicken."
+                        )
+                        page.pubsub.send_all({
+                            "topic": "route", "kind": "status",
+                            "msg": f"Neuer Login fehlgeschlagen: {auth_ex}",
+                            "error": True,
+                        })
+                        return
+
+                    # Re-Login erfolgreich -> GUI wieder auf "angemeldet" setzen,
+                    # damit Character-Anzeige/Buttons konsistent bleiben.
+                    try:
+                        new_char_id = auth.get_character_id()
+                        new_char_name = None
+                        try:
+                            new_char_name = get_character_name(new_char_id)
+                            auth.set_last_char(new_char_id, new_char_name)
+                        except Exception:
+                            pass
+                        page.pubsub.send_all({
+                            "topic": "login", "kind": "login_success",
+                            "char_id": new_char_id, "char_name": new_char_name,
+                        })
+                    except Exception:
+                        pass
+
                 set_waypoint(location_id, auth, clear_other_waypoints=clear, add_to_beginning=prepend)
                 page.pubsub.send_all({
                     "topic": "route", "kind": "status",
@@ -792,23 +937,54 @@ def main(page: ft.Page):
             except requests.exceptions.HTTPError as ex:
                 code = ex.response.status_code if ex.response is not None else "?"
                 if code == 401:
+                    # Trotz Scope-Check noch 401 -> Token vorsorglich verwerfen und
+                    # GUI eindeutig zuruecksetzen, damit der naechste Versuch
+                    # garantiert neu einloggt statt denselben Fehler zu wiederholen.
+                    auth.invalidate_tokens()
+                    reset_login_ui_to_logged_out(
+                        "Zugriff verweigert (401). Berechtigungen zurueckgesetzt - "
+                        "bitte erneut einloggen."
+                    )
                     msg = ("Kein Zugriff (401): Scope esi-ui.write_waypoint.v1 fehlt "
-                           "vermutlich noch im Token. Bitte neu einloggen.")
+                           "im Token. Token wurde zurueckgesetzt - bitte ueber den "
+                           "Login-Button neu anmelden und danach erneut versuchen.")
                 else:
                     msg = f"ESI-Fehler beim Setzen des Wegpunkts ({code})."
                 page.pubsub.send_all({"topic": "route", "kind": "status", "msg": msg, "error": True})
+            except RuntimeError as ex:
+                # z.B. "Kein refresh_token vorhanden. Login erforderlich." nach
+                # invalidate_tokens(): klare, verstaendliche Meldung statt
+                # kryptischem "unbekannter Fehler".
+                auth.invalidate_tokens()
+                reset_login_ui_to_logged_out(
+                    "Kein gueltiger Token vorhanden. Bitte ueber den Login-Button neu anmelden."
+                )
+                page.pubsub.send_all({
+                    "topic": "route", "kind": "status",
+                    "msg": f"Kein gueltiger Token vorhanden ({ex}). Bitte erneut einloggen.",
+                    "error": True,
+                })
             except Exception as ex:
                 page.pubsub.send_all({
                     "topic": "route", "kind": "status",
-                    "msg": f"Fehler beim Setzen des Wegpunkts: {ex}", "error": True,
+                    "msg": f"Unerwarteter Fehler beim Setzen des Wegpunkts: {ex}", "error": True,
                 })
+            finally:
+                page.pubsub.send_all({"topic": "route", "kind": "busy_done"})
 
         threading.Thread(target=worker, daemon=True).start()
 
     def on_route_message(message):
         if message.get("topic") != "route":
             return
-        if message.get("kind") == "status":
+        kind = message.get("kind")
+        if kind == "busy_start":
+            set_busy(True)
+            return
+        if kind == "busy_done":
+            set_busy(False)
+            return
+        if kind == "status":
             set_status(message.get("msg", ""), error=message.get("error", False))
 
     page.pubsub.subscribe(on_route_message)
@@ -839,15 +1015,26 @@ def main(page: ft.Page):
             scan_btn.disabled = False
             export_csv_btn.disabled = not result_holder["by_name"]
             export_html_btn.disabled = not result_holder["by_name"]
+            # Login erfolgreich -> Button dient jetzt als Logout.
+            logged_in_state["value"] = True
+            login_btn.text = "Logout"
+            login_btn.icon = ft.Icons.LOGOUT
+            login_btn.on_click = do_logout
             page.update()
             return
         if kind == "login_error":
             character_text.value = "Nicht angemeldet."
             status_text.value = message.get("msg", "Login fehlgeschlagen.")
             status_text.color = ft.Colors.RED_300
+            # Drohnen scannen bleibt gesperrt, bis ein erfolgreicher Login stattfand.
             scan_btn.disabled = True
             export_csv_btn.disabled = True
             export_html_btn.disabled = True
+            # Zurueck zu "nicht angemeldet" -> Button wieder als Login nutzbar.
+            logged_in_state["value"] = False
+            login_btn.text = "Login (EVE SSO)"
+            login_btn.icon = ft.Icons.LOGIN
+            login_btn.on_click = do_login
             page.update()
             return
 
@@ -1098,7 +1285,7 @@ def main(page: ft.Page):
         set_status(f"HTML-Bericht exportiert: {path}")
         page.update()
 
-    login_btn.on_click = do_login
+    login_btn.on_click = do_login  # wird bei erfolgreichem Login zu do_logout umgebogen
     scan_btn.on_click = do_scan
     export_csv_btn.on_click = export_csv
     export_html_btn.on_click = export_html
@@ -1125,6 +1312,18 @@ def main(page: ft.Page):
                 auth.clear_last_char()
                 last_id, last_name = None, None
 
+            # Scope-Mismatch bereits beim Start erkennen (z.B. nach Update mit neuem
+            # Scope esi-ui.write_waypoint.v1): alten Token verwerfen, damit der
+            # naechste Login-Klick garantiert einen frischen Browser-Login ausloest,
+            # statt den (fuer neue Endpunkte ungueltigen) Token stillschweigend
+            # weiterzuverwenden.
+            if auth.has_refresh_token() and not auth.scopes_match_cache():
+                auth.invalidate_tokens()
+                character_text.value = "Berechtigungen veraltet. Bitte erneut einloggen."
+                scan_btn.disabled = True
+                page.update()
+                return
+
             if last_id is not None and last_name:
                 character_text.value = f"Angemeldet als {last_name} (Character-ID: {last_id})"
             elif jwt_char_id is not None:
@@ -1132,7 +1331,14 @@ def main(page: ft.Page):
             else:
                 character_text.value = "Tokencache vorhanden. Bitte einloggen zum Bestaetigen."
 
+            # Es liegt ein gueltiger, scope-passender Token vor -> Drohnen scannen
+            # freigeben und den Login-Button direkt als Logout anbieten, statt
+            # ihn erst nach einem erneuten manuellen Login umzuschalten.
             scan_btn.disabled = False
+            logged_in_state["value"] = True
+            login_btn.text = "Logout"
+            login_btn.icon = ft.Icons.LOGOUT
+            login_btn.on_click = do_logout
         except Exception:
             character_text.value = "Nicht angemeldet."
         page.update()
@@ -1160,4 +1366,3 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     _launch_flet_app(main)
-
