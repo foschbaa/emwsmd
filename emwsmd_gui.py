@@ -1,12 +1,12 @@
 """
-emwsmd_GUI.3.1.9.py
-Ey Mann, wo sind meine Drohnen! - GUI-Version (auf Basis von emwsmd.py v3.1.8)
+emwsmd_GUI.3.2.0.py
+Ey Mann, wo sind meine Drohnen! - GUI-Version (auf Basis von emwsmd.py v3.2.0)
 
 Eigenstaendige, komplette Anwendung: Auth, ESI-Abfrage, Datenaufbereitung UND GUI
 liegen in dieser einen Datei. Die Konsolen-Version wird nicht mehr separat benoetigt.
 
 Versionsschema fuer diese GUI-Reihe: emwsmd_GUI.<major>.<minor>.<patch>.py
-Diese Datei: emwsmd_GUI.3.1.9.py
+Diese Datei: emwsmd_GUI.3.2.0.py
 
 Installation (im aktivierten venv):
     pip install "flet[all]" requests
@@ -38,7 +38,7 @@ import flet as ft
 
 APP_NAME = "emwsmd_gui"
 APP_TAGLINE = "Ey Mann, wo sind meine Drohnen!"
-GUI_VERSION = "3.1.9"
+GUI_VERSION = "3.2.0"
 
 REPORT_TITLE = f"{APP_TAGLINE}"
 REPORT_FILENAME_DEFAULT = f"{APP_NAME}_Bericht.html"
