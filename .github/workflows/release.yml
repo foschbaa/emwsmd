@@ -113,7 +113,9 @@ jobs:
 
       - name: Windows GUI Paket zippen
         run: |
-          if exist README-GUI.md copy README-GUI.md dist\README-GUI.txt
+          if (Test-Path README-GUI.md) {
+            Copy-Item README-GUI.md dist\README-GUI.txt
+          }
           cd dist
           powershell Compress-Archive -Path emwsmd-gui.exe,README-GUI.txt -DestinationPath emwsmd-gui_windows.zip
 
