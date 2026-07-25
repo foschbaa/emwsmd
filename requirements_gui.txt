@@ -1,0 +1,6 @@
+# GUI dependencies for emwsmd
+# Verified in the current project venv after installing: pip install "flet[all]" requests
+# Only the direct runtime requirements are pinned here; Flet[all] pulls the rest transitively.
+
+flet[all]==0.28.3
+requests==2.32.5
