@@ -15,7 +15,7 @@ Ein EVE Online GUI-Tool, das deine Drohnen in **Stationen und Containern** zaehl
 
 ## ✨ Was macht emwsmd?
 
-emwsmd durchsucht dein Charakter-Inventar ueber die EVE ESI-API und zaehlt **alle Drohnen, die in Stationen oder Containern liegen** – Drohnen im All werden nicht erfasst [file:1][code_file:9].
+emwsmd durchsucht dein Charakter-Inventar ueber die EVE ESI-API und zaehlt **alle Drohnen, die in Stationen oder Containern liegen** – Drohnen im All werden nicht erfasst.
 
 <table>
 <tr>

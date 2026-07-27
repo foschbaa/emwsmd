@@ -221,6 +221,4 @@ __marimo__/
 tokencache
 *.html
 *.ini
-
-
 .DS_Store
