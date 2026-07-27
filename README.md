@@ -52,14 +52,14 @@ emwsmd durchsucht dein Charakter-Inventar ueber die EVE ESI-API und zaehlt **all
 | 🐧 Linux | 🔧 Vorerst kein Fertig-Build | `.py` direkt starten oder eigenen PyInstaller-Build erstellen |
 | 🍎 macOS | 🔧 Vorerst kein Fertig-Build | `.py` direkt starten oder eigenen PyInstaller-Build erstellen |
 
-Die Windows-.exe ist der **empfohlene Weg** fuer die meisten Nutzer [code_file:9].
+Die Windows-.exe ist der **empfohlene Weg** fuer die meisten Nutzer.
 
 ---
 
 ## ⚠️ Sicherheitshinweis
 
 > ### 🔒 Gib **niemals** die Datei `tokencache` weiter.
-> Sie enthaelt deine lokal gespeicherten EVE-Login-Daten. Nicht in ZIPs, Discord, Support-Tickets oder Git-Repos hochladen [file:1][code_file:9].
+> Sie enthaelt deine lokal gespeicherten EVE-Login-Daten. Nicht in ZIPs, Discord, Support-Tickets oder Git-Repos hochladen.
 
 ---
 
@@ -79,15 +79,15 @@ Die Windows-.exe ist der **empfohlene Weg** fuer die meisten Nutzer [code_file:9
 Noch kein fertiger Build – aber einfach selbst starten:
 
 ```bash
-pip install "flet[all]" requests
-python emwsmd_GUI.3.2.4.py
+pip install "flet[all]"==0.28.3 requests==2.32.5
+python emwsmd_GUI.py
 ```
 
 Oder eigenen Build erstellen:
 
 ```bash
 pip install pyinstaller
-pyinstaller --onefile --windowed --name emwsmd-gui emwsmd_GUI.3.2.4.py
+pyinstaller --onefile --windowed --name emwsmd-gui emwsmd_GUI.py
 ```
 
 ---
@@ -114,14 +114,14 @@ Optional: CSV/HTML exportieren oder Route/Waypoint direkt setzen
 
 ## 📍 Routing direkt aus der GUI
 
-Im Tab **Nach Station** hat jede Zeile zwei Aktions-Buttons [code_file:9]:
+Im Tab **Nach Station** hat jede Zeile zwei Aktions-Buttons:
 
 | Button | Wirkung |
 |---|---|
 | 🧭 **Route setzen** | Setzt die Station als neues Ziel, loescht andere Wegpunkte |
 | ➕ **Waypoint hinzufuegen** | Haengt die Station an die bestehende Route an |
 
-Dafuer wird der Scope `esi-ui.write_waypoint.v1` benoetigt. Passt ein alter Token nicht mehr zu den benoetigten Scopes, wird er automatisch zurueckgesetzt und ein neuer Browser-Login angefordert – ganz ohne manuelles Aufraeumen [code_file:9].
+Dafuer wird der Scope `esi-ui.write_waypoint.v1` benoetigt. Passt ein alter Token nicht mehr zu den benoetigten Scopes, wird er automatisch zurueckgesetzt und ein neuer Browser-Login angefordert – ganz ohne manuelles Aufraeumen.
 
 ---
 
@@ -139,7 +139,7 @@ Dafuer wird der Scope `esi-ui.write_waypoint.v1` benoetigt. Passt ein alter Toke
 
 ## 🛠️ Windows Release Build
 
-Die `.exe` wird automatisch per GitHub Actions gebaut, sobald ein Release veroeffentlicht wird: PyInstaller erstellt `emwsmd-gui.exe`, die App wird zusammen mit der README als `emwsmd-gui_windows.zip` an das Release angehaengt [code_file:9].
+Die `.exe` wird automatisch per GitHub Actions gebaut, sobald ein Release veroeffentlicht wird: PyInstaller erstellt `emwsmd-gui.exe`, die App wird zusammen mit der README als `emwsmd-gui_windows.zip` an das Release angehaengt.
 
 ---
 
